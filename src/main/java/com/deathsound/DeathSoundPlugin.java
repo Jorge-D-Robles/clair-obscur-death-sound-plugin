@@ -20,9 +20,9 @@ import java.io.InputStream;
 
 @Slf4j
 @PluginDescriptor(
-		name = "Death Sound",
-		description = "Plays a custom sound when the player dies.",
-		tags = {"death", "sound", "music"}
+		name = "Clair Obscur Death",
+		description = "Plays the death scene from expedition 33 when the player dies. For those who come after.",
+		tags = {"death", "sound", "music", "expedition 33", "clair obscur"}
 )
 public class DeathSoundPlugin extends Plugin
 {
@@ -36,6 +36,7 @@ public class DeathSoundPlugin extends Plugin
      * -- SETTER --
      *  This method is used for testing purposes to inject a mock Clip.
      *
+     * @param clip The Clip object to use.
      */
     @Setter
     private Clip clip;
@@ -44,16 +45,13 @@ public class DeathSoundPlugin extends Plugin
 	protected void startUp() throws Exception
 	{
 		log.info("Death Sound started!");
-		// Load the sound file from the resources folder
 		try
 		{
-			// The path must match the location of your .wav file in the resources directory
 			InputStream audioSrc = DeathSoundPlugin.class.getResourceAsStream("clair_obscur_death.wav");
 			if (audioSrc == null) {
 				log.error("Sound file not found in resources!");
 				return;
 			}
-			// Using BufferedInputStream for better performance
 			InputStream bufferedIn = new BufferedInputStream(audioSrc);
 			AudioInputStream audioStream = AudioSystem.getAudioInputStream(bufferedIn);
 			clip = AudioSystem.getClip();
@@ -68,7 +66,6 @@ public class DeathSoundPlugin extends Plugin
 	@Override
 	protected void shutDown() throws Exception
 	{
-		// Release the audio clip resource
 		if (clip != null)
 		{
 			clip.close();
@@ -80,22 +77,50 @@ public class DeathSoundPlugin extends Plugin
 	public void onActorDeath(ActorDeath actorDeath)
 	{
 		Actor actor = actorDeath.getActor();
-		// Check if the actor that died is the local player
 		if (actor instanceof Player && actor == client.getLocalPlayer())
 		{
-			// Play the sound if the clip has been loaded successfully
 			if (clip != null)
 			{
-				// Rewind the clip to the beginning before playing
+				// Set the volume BEFORE playing the clip
+				setVolume();
 				clip.setFramePosition(0);
 				clip.start();
 			}
 		}
 	}
 
-    @Provides
+	/**
+	 * Sets the volume of the clip based on the configuration.
+	 */
+	private void setVolume()
+	{
+		// Get the volume from the config, defaulting to 80 if something goes wrong.
+		float volume = config.volume() / 100.0f;
+
+		// Ensure the volume is within the valid range [0.0, 1.0]
+		volume = Math.max(0.0f, Math.min(1.0f, volume));
+
+		try
+		{
+			// A "FloatControl" is what the Java Sound API uses to manage settings like volume, pan, and reverb.
+			FloatControl gainControl = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
+
+			// The volume is set in decibels. We need to convert our linear scale [0.0, 1.0]
+			// to the logarithmic decibel scale.
+			float dB = (float) (Math.log(volume) / Math.log(10.0) * 20.0);
+			gainControl.setValue(dB);
+		}
+		catch (IllegalArgumentException e)
+		{
+			log.warn("Could not set volume. Master gain control not found on clip.", e);
+		}
+	}
+
+
+	@Provides
 	DeathSoundConfig provideConfig(ConfigManager configManager)
 	{
 		return configManager.getConfig(DeathSoundConfig.class);
 	}
+
 }
